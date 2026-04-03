@@ -199,7 +199,7 @@ const navItems = [
   { label: "Контакты", href: "#contacts" },
 ];
 
-function PlanCard({ plan }: { plan: typeof plans[0] }) {
+function PlanCard({ plan, onBuy }: { plan: typeof plans[0]; onBuy: (p: typeof plans[0]) => void }) {
   return (
     <div
       className={`relative rounded-xl p-5 flex flex-col gap-3 transition-all duration-300 cursor-pointer group ${plan.popular ? "cyber-card-popular" : "cyber-card"}`}
@@ -239,7 +239,7 @@ function PlanCard({ plan }: { plan: typeof plans[0] }) {
         ))}
       </div>
 
-      <button className="mt-auto w-full py-3 rounded-lg font-bold text-sm tracking-wider flex items-center justify-center gap-2 neon-btn-cyan" style={{ fontFamily: "'Orbitron', monospace" }}>
+      <button onClick={() => onBuy(plan)} className="mt-auto w-full py-3 rounded-lg font-bold text-sm tracking-wider flex items-center justify-center gap-2 neon-btn-cyan" style={{ fontFamily: "'Orbitron', monospace" }}>
         <Icon name="ShoppingCart" size={14} />
         Приобрести — {plan.price === 0 ? "0 ₽" : `${plan.price} ₽`}
       </button>
@@ -247,16 +247,32 @@ function PlanCard({ plan }: { plan: typeof plans[0] }) {
   );
 }
 
+type Modal = "login" | "register" | "purchase" | "pterodactyl" | null;
+
 export default function Index() {
   const [activeNav, setActiveNav] = useState("hero");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [modal, setModal] = useState<Modal>(null);
+  const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null);
+  const [authTab, setAuthTab] = useState<"login" | "register">("login");
+  const [pteroStep, setPteroStep] = useState(0);
 
   const handleNav = (href: string) => {
     setActiveNav(href.replace("#", ""));
     setMobileMenuOpen(false);
     const el = document.querySelector(href);
     if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const openAuth = (tab: "login" | "register") => {
+    setAuthTab(tab);
+    setModal("auth" as Modal);
+  };
+
+  const openPurchase = (plan: typeof plans[0]) => {
+    setSelectedPlan(plan);
+    setModal("purchase");
   };
 
   return (
@@ -285,10 +301,10 @@ export default function Index() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="hidden sm:block px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors">
+            <button onClick={() => openAuth("login")} className="hidden sm:block px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors">
               Войти
             </button>
-            <button className="px-4 py-2 rounded-lg text-sm font-bold neon-btn-solid" style={{ fontFamily: "'Orbitron', monospace" }}>
+            <button onClick={() => openAuth("register")} className="px-4 py-2 rounded-lg text-sm font-bold neon-btn-solid" style={{ fontFamily: "'Orbitron', monospace" }}>
               Начать
             </button>
             <button className="lg:hidden text-gray-400 hover:text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -381,7 +397,7 @@ export default function Index() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {plans.map((plan) => (
-              <PlanCard key={plan.id} plan={plan} />
+              <PlanCard key={plan.id} plan={plan} onBuy={openPurchase} />
             ))}
           </div>
 
@@ -407,6 +423,15 @@ export default function Index() {
               <p className="text-gray-400 text-lg mb-8 leading-relaxed">
                 Современная панель управления с удобным интерфейсом. Запускай, останавливай, настраивай сервер в пару кликов — даже со смартфона.
               </p>
+
+              <button
+                onClick={() => { setPteroStep(0); setModal("pterodactyl"); }}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-lg font-bold text-sm tracking-wider mb-8"
+                style={{ background: "rgba(191,90,242,0.15)", border: "1px solid rgba(191,90,242,0.4)", color: "var(--neon-purple)", fontFamily: "'Orbitron', monospace" }}
+              >
+                <Icon name="Terminal" size={16} />
+                Установить Pterodactyl Panel
+              </button>
 
               <div className="space-y-4">
                 {[
@@ -672,6 +697,295 @@ export default function Index() {
       </section>
 
       {/* FOOTER */}
+      {/* ===== MODALS ===== */}
+
+      {/* Auth Modal (Войти / Начать) */}
+      {modal === ("auth" as Modal) && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }} onClick={() => setModal(null)}>
+          <div className="w-full max-w-md rounded-2xl p-8 animate-fade-in-up" style={{ background: "rgba(10,22,40,0.98)", border: "1px solid rgba(0,245,255,0.3)", boxShadow: "0 0 60px rgba(0,245,255,0.2)" }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex gap-1 p-1 rounded-lg" style={{ background: "rgba(0,0,0,0.3)" }}>
+                {(["login", "register"] as const).map(tab => (
+                  <button key={tab} onClick={() => setAuthTab(tab)} className="px-4 py-2 rounded-md text-sm font-bold transition-all"
+                    style={{ background: authTab === tab ? "rgba(0,245,255,0.15)" : "transparent", color: authTab === tab ? "var(--neon-cyan)" : "#6b7280", border: authTab === tab ? "1px solid rgba(0,245,255,0.3)" : "1px solid transparent" }}>
+                    {tab === "login" ? "Войти" : "Регистрация"}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white transition-colors">
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {authTab === "register" && (
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">Имя пользователя</label>
+                  <input type="text" placeholder="gamepro2077" className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
+                    style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,245,255,0.2)" }} />
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Email</label>
+                <input type="email" placeholder="your@email.com" className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
+                  style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,245,255,0.2)" }} />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Пароль</label>
+                <input type="password" placeholder="••••••••" className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
+                  style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,245,255,0.2)" }} />
+              </div>
+              {authTab === "login" && (
+                <div className="text-right">
+                  <button className="text-xs text-gray-500 hover:text-cyan-400 transition-colors">Забыли пароль?</button>
+                </div>
+              )}
+              <button className="w-full py-3 rounded-lg font-bold text-sm tracking-wider neon-btn-solid mt-2" style={{ fontFamily: "'Orbitron', monospace" }}>
+                {authTab === "login" ? "Войти в аккаунт" : "Создать аккаунт"}
+              </button>
+              <p className="text-center text-xs text-gray-600">
+                {authTab === "login" ? "Нет аккаунта? " : "Уже есть аккаунт? "}
+                <button onClick={() => setAuthTab(authTab === "login" ? "register" : "login")} className="text-cyan-400 hover:underline">
+                  {authTab === "login" ? "Регистрация" : "Войти"}
+                </button>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase Modal */}
+      {modal === "purchase" && selectedPlan && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }} onClick={() => setModal(null)}>
+          <div className="w-full max-w-lg rounded-2xl p-8 animate-fade-in-up" style={{ background: "rgba(10,22,40,0.98)", border: "1px solid rgba(0,245,255,0.3)", boxShadow: "0 0 60px rgba(0,245,255,0.2)" }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-bold text-xl text-white" style={{ fontFamily: "'Orbitron', monospace" }}>
+                {selectedPlan.flag} {selectedPlan.name}
+              </h3>
+              <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white transition-colors">
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-xl mb-6" style={{ background: "rgba(0,245,255,0.05)", border: "1px solid rgba(0,245,255,0.15)" }}>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="text-gray-400">CPU: <span className="text-cyan-400 font-bold">{selectedPlan.cpu}</span></div>
+                <div className="text-gray-400">RAM: <span className="text-white font-medium">{selectedPlan.ram}</span></div>
+                <div className="text-gray-400">Диск: <span className="text-white font-medium">{selectedPlan.disk}</span></div>
+                <div className="text-gray-400">Сеть: <span className="text-white font-medium">{selectedPlan.net}</span></div>
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-xs text-gray-400 mb-2 block">Период оплаты</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["1 месяц", "3 месяца", "6 месяцев"].map((p, i) => (
+                    <button key={p} className="py-2 rounded-lg text-sm font-medium transition-all"
+                      style={{ background: i === 0 ? "rgba(0,245,255,0.15)" : "rgba(255,255,255,0.05)", color: i === 0 ? "var(--neon-cyan)" : "#9ca3af", border: i === 0 ? "1px solid rgba(0,245,255,0.4)" : "1px solid rgba(255,255,255,0.1)" }}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">Email для аккаунта</label>
+                <input type="email" placeholder="your@email.com" className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none"
+                  style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,245,255,0.2)" }} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between mb-4 p-4 rounded-xl" style={{ background: "rgba(0,0,0,0.3)" }}>
+              <span className="text-gray-400">Итого в месяц:</span>
+              <span className="text-2xl font-black" style={{ color: "var(--neon-cyan)", fontFamily: "'Orbitron', monospace" }}>
+                {selectedPlan.price === 0 ? "0 ₽" : `${selectedPlan.price} ₽`}
+              </span>
+            </div>
+
+            <button className="w-full py-4 rounded-lg font-bold tracking-wider neon-btn-solid flex items-center justify-center gap-2" style={{ fontFamily: "'Orbitron', monospace" }}>
+              <Icon name="CreditCard" size={18} />
+              Оплатить через Яндекс.Кассу
+            </button>
+            <p className="text-center text-xs text-gray-600 mt-3">Visa · MasterCard · МИР · СБП · ЮMoney</p>
+          </div>
+        </div>
+      )}
+
+      {/* Pterodactyl Install Modal */}
+      {modal === "pterodactyl" && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.9)", backdropFilter: "blur(8px)" }} onClick={() => setModal(null)}>
+          <div className="w-full max-w-3xl rounded-2xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col" style={{ background: "rgba(5,10,20,0.99)", border: "1px solid rgba(191,90,242,0.4)", boxShadow: "0 0 80px rgba(191,90,242,0.2)" }} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4" style={{ background: "rgba(0,0,0,0.5)", borderBottom: "1px solid rgba(191,90,242,0.2)" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(191,90,242,0.2)" }}>
+                  <Icon name="Feather" size={18} style={{ color: "var(--neon-purple)" }} />
+                </div>
+                <div>
+                  <div className="font-bold text-white text-sm" style={{ fontFamily: "'Orbitron', monospace" }}>Pterodactyl Panel</div>
+                  <div className="text-xs text-gray-500">Гайд по установке на Ubuntu 22.04</div>
+                </div>
+              </div>
+              <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white transition-colors">
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+
+            {/* Steps nav */}
+            <div className="flex overflow-x-auto px-6 py-3 gap-2" style={{ borderBottom: "1px solid rgba(191,90,242,0.15)", scrollbarWidth: "none" }}>
+              {["Зависимости", "База данных", "Установка", "Настройка", "Systemd"].map((step, i) => (
+                <button key={i} onClick={() => setPteroStep(i)}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  style={{ background: pteroStep === i ? "rgba(191,90,242,0.2)" : "rgba(255,255,255,0.05)", color: pteroStep === i ? "var(--neon-purple)" : "#6b7280", border: pteroStep === i ? "1px solid rgba(191,90,242,0.4)" : "1px solid transparent" }}>
+                  {i + 1}. {step}
+                </button>
+              ))}
+            </div>
+
+            <div className="overflow-y-auto p-6 flex-1">
+              {pteroStep === 0 && (
+                <div className="space-y-3">
+                  <p className="text-gray-400 text-sm mb-4">Установка PHP 8.3, MariaDB, Redis, Nginx и Composer на Ubuntu 22.04.</p>
+                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Обновление пакетов
+apt -y install software-properties-common curl \\
+  apt-transport-https ca-certificates gnupg
+
+# PHP 8.3 (PPA Ondřej)
+LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
+
+# Redis официальный репозиторий
+curl -fsSL https://packages.redis.io/gpg | \\
+  sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] \\
+  https://packages.redis.io/deb $(lsb_release -cs) main" | \\
+  sudo tee /etc/apt/sources.list.d/redis.list
+
+apt update
+
+# Установка всех зависимостей
+apt -y install php8.3 php8.3-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} \\
+  mariadb-server nginx tar unzip git redis-server
+
+# Composer
+curl -sS https://getcomposer.org/installer | \\
+  sudo php -- --install-dir=/usr/local/bin --filename=composer`}</pre>
+                </div>
+              )}
+              {pteroStep === 1 && (
+                <div className="space-y-3">
+                  <p className="text-gray-400 text-sm mb-4">Создание базы данных и пользователя MariaDB для панели.</p>
+                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Подключиться к MariaDB
+mariadb -u root -p
+
+# Внутри MariaDB — замени 'yourPassword' на свой пароль!
+CREATE USER 'pterodactyl'@'127.0.0.1' 
+  IDENTIFIED BY 'yourPassword';
+CREATE DATABASE panel;
+GRANT ALL PRIVILEGES ON panel.* 
+  TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;
+exit`}</pre>
+                  <div className="p-3 rounded-lg text-xs" style={{ background: "rgba(255,170,0,0.08)", border: "1px solid rgba(255,170,0,0.2)", color: "#ffaa00" }}>
+                    Запомни пароль — он понадобится на шаге настройки окружения.
+                  </div>
+                </div>
+              )}
+              {pteroStep === 2 && (
+                <div className="space-y-3">
+                  <p className="text-gray-400 text-sm mb-4">Скачивание и распаковка панели Pterodactyl.</p>
+                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`mkdir -p /var/www/pterodactyl
+cd /var/www/pterodactyl
+
+curl -Lo panel.tar.gz \\
+  https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
+tar -xzvf panel.tar.gz
+chmod -R 755 storage/* bootstrap/cache/
+
+cp .env.example .env
+COMPOSER_ALLOW_SUPERUSER=1 composer install \\
+  --no-dev --optimize-autoloader
+
+# Генерация ключа приложения
+php artisan key:generate --force`}</pre>
+                </div>
+              )}
+              {pteroStep === 3 && (
+                <div className="space-y-3">
+                  <p className="text-gray-400 text-sm mb-4">Настройка окружения, подключение к БД и создание первого администратора.</p>
+                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Настройка окружения (URL сайта, кеш и т.д.)
+php artisan p:environment:setup
+
+# Подключение к базе данных
+php artisan p:environment:database
+
+# (Опционально) Настройка почты
+php artisan p:environment:mail
+
+# Миграция и заполнение БД
+php artisan migrate --seed --force
+
+# Создать первого администратора
+php artisan p:user:make
+
+# Права на файлы для Nginx
+chown -R www-data:www-data /var/www/pterodactyl/*
+
+# Крон — добавь в crontab (crontab -e)
+* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1`}</pre>
+                </div>
+              )}
+              {pteroStep === 4 && (
+                <div className="space-y-3">
+                  <p className="text-gray-400 text-sm mb-4">Настройка systemd-сервиса для очереди задач Pterodactyl.</p>
+                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Создай файл /etc/systemd/system/pteroq.service
+[Unit]
+Description=Pterodactyl Queue Worker
+After=redis-server.service
+
+[Service]
+User=www-data
+Group=www-data
+Restart=always
+ExecStart=/usr/bin/php /var/www/pterodactyl/artisan \\
+  queue:work --queue=high,standard,low --sleep=3 --tries=3
+StartLimitInterval=180
+StartLimitBurst=30
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+
+# Запуск сервисов
+sudo systemctl enable --now redis-server
+sudo systemctl enable --now pteroq.service`}</pre>
+                  <div className="p-3 rounded-lg text-xs" style={{ background: "rgba(57,255,20,0.06)", border: "1px solid rgba(57,255,20,0.2)", color: "var(--neon-green)" }}>
+                    Готово! Теперь перейди на pterodactyl.io для настройки Nginx и Wings (агента на нодах).
+                  </div>
+                  <a href="https://pterodactyl.io/panel/1.0/getting_started.html" target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold"
+                    style={{ background: "rgba(191,90,242,0.15)", color: "var(--neon-purple)", border: "1px solid rgba(191,90,242,0.3)" }}>
+                    <Icon name="ExternalLink" size={12} />
+                    Официальная документация Pterodactyl
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: "1px solid rgba(191,90,242,0.15)" }}>
+              <button onClick={() => setPteroStep(Math.max(0, pteroStep - 1))} disabled={pteroStep === 0}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-30"
+                style={{ background: "rgba(255,255,255,0.05)", color: "#9ca3af" }}>
+                ← Назад
+              </button>
+              <span className="text-xs text-gray-600">Шаг {pteroStep + 1} из 5</span>
+              <button onClick={() => setPteroStep(Math.min(4, pteroStep + 1))} disabled={pteroStep === 4}
+                className="px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-30"
+                style={{ background: "rgba(191,90,242,0.15)", color: "var(--neon-purple)", border: "1px solid rgba(191,90,242,0.3)" }}>
+                Далее →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <footer className="py-12 px-4" style={{ background: "rgba(5,10,15,0.9)", borderTop: "1px solid rgba(0,245,255,0.1)" }}>
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
