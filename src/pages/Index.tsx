@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Icon from "@/components/ui/icon";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyIcon = any;
+
+const AUTH_URL = "https://functions.poehali.dev/41c1adec-e81f-482f-a036-2b3f2deafa2c";
 
 const HERO_IMAGE = "https://cdn.poehali.dev/projects/4c4908b8-8f83-4f3d-abf5-b4fb93b8af1a/files/4ec654f4-33b3-4ef0-a4e7-4f62f32fde2a.jpg";
 
@@ -247,16 +250,33 @@ function PlanCard({ plan, onBuy }: { plan: typeof plans[0]; onBuy: (p: typeof pl
   );
 }
 
-type Modal = "login" | "register" | "purchase" | "pterodactyl" | null;
+type Modal = "auth" | "purchase" | null;
+type User = { id: number; username: string; email: string };
 
 export default function Index() {
+  const navigate = useNavigate();
   const [activeNav, setActiveNav] = useState("hero");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
   const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null);
   const [authTab, setAuthTab] = useState<"login" | "register">("login");
-  const [pteroStep, setPteroStep] = useState(0);
+
+  // Auth state
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [authForm, setAuthForm] = useState({ username: "", email: "", password: "" });
+
+  // Restore session on load
+  useEffect(() => {
+    const token = localStorage.getItem("nexus_token");
+    if (!token) return;
+    fetch(`${AUTH_URL}?action=me`, { headers: { "X-Session-Token": token } })
+      .then(r => r.json())
+      .then(d => { if (d.ok) setUser(d.user); else localStorage.removeItem("nexus_token"); })
+      .catch(() => {});
+  }, []);
 
   const handleNav = (href: string) => {
     setActiveNav(href.replace("#", ""));
@@ -267,7 +287,39 @@ export default function Index() {
 
   const openAuth = (tab: "login" | "register") => {
     setAuthTab(tab);
-    setModal("auth" as Modal);
+    setAuthError("");
+    setAuthForm({ username: "", email: "", password: "" });
+    setModal("auth");
+  };
+
+  const handleAuthSubmit = async () => {
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const body: Record<string, string> = { email: authForm.email, password: authForm.password };
+      if (authTab === "register") body.username = authForm.username;
+      const res = await fetch(`${AUTH_URL}?action=${authTab}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) { setAuthError(data.error || "Ошибка"); return; }
+      localStorage.setItem("nexus_token", data.token);
+      setUser(data.user);
+      setModal(null);
+    } catch {
+      setAuthError("Ошибка сети");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem("nexus_token");
+    if (token) await fetch(`${AUTH_URL}?action=logout`, { method: "POST", headers: { "X-Session-Token": token } });
+    localStorage.removeItem("nexus_token");
+    setUser(null);
   };
 
   const openPurchase = (plan: typeof plans[0]) => {
@@ -301,12 +353,32 @@ export default function Index() {
           </div>
 
           <div className="flex items-center gap-3">
-            <button onClick={() => openAuth("login")} className="hidden sm:block px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors">
-              Войти
+            <button onClick={() => navigate("/pterodactyl")} className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+              style={{ background: "rgba(191,90,242,0.1)", color: "var(--neon-purple)", border: "1px solid rgba(191,90,242,0.25)" }}>
+              <Icon name="Feather" size={12} />
+              Pterodactyl
             </button>
-            <button onClick={() => openAuth("register")} className="px-4 py-2 rounded-lg text-sm font-bold neon-btn-solid" style={{ fontFamily: "'Orbitron', monospace" }}>
-              Начать
-            </button>
+            {user ? (
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: "rgba(0,245,255,0.08)", border: "1px solid rgba(0,245,255,0.2)" }}>
+                  <Icon name="User" size={14} className="text-cyan-400" />
+                  <span className="text-sm text-white font-medium">{user.username}</span>
+                </div>
+                <button onClick={handleLogout} className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-white transition-colors"
+                  style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+                  Выйти
+                </button>
+              </div>
+            ) : (
+              <>
+                <button onClick={() => openAuth("login")} className="hidden sm:block px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors">
+                  Войти
+                </button>
+                <button onClick={() => openAuth("register")} className="px-4 py-2 rounded-lg text-sm font-bold neon-btn-solid" style={{ fontFamily: "'Orbitron', monospace" }}>
+                  Начать
+                </button>
+              </>
+            )}
             <button className="lg:hidden text-gray-400 hover:text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               <Icon name={mobileMenuOpen ? "X" : "Menu"} size={22} />
             </button>
@@ -699,14 +771,14 @@ export default function Index() {
       {/* FOOTER */}
       {/* ===== MODALS ===== */}
 
-      {/* Auth Modal (Войти / Начать) */}
-      {modal === ("auth" as Modal) && (
+      {/* Auth Modal */}
+      {modal === "auth" && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }} onClick={() => setModal(null)}>
           <div className="w-full max-w-md rounded-2xl p-8 animate-fade-in-up" style={{ background: "rgba(10,22,40,0.98)", border: "1px solid rgba(0,245,255,0.3)", boxShadow: "0 0 60px rgba(0,245,255,0.2)" }} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex gap-1 p-1 rounded-lg" style={{ background: "rgba(0,0,0,0.3)" }}>
                 {(["login", "register"] as const).map(tab => (
-                  <button key={tab} onClick={() => setAuthTab(tab)} className="px-4 py-2 rounded-md text-sm font-bold transition-all"
+                  <button key={tab} onClick={() => { setAuthTab(tab); setAuthError(""); }} className="px-4 py-2 rounded-md text-sm font-bold transition-all"
                     style={{ background: authTab === tab ? "rgba(0,245,255,0.15)" : "transparent", color: authTab === tab ? "var(--neon-cyan)" : "#6b7280", border: authTab === tab ? "1px solid rgba(0,245,255,0.3)" : "1px solid transparent" }}>
                     {tab === "login" ? "Войти" : "Регистрация"}
                   </button>
@@ -721,31 +793,42 @@ export default function Index() {
               {authTab === "register" && (
                 <div>
                   <label className="text-xs text-gray-400 mb-1 block">Имя пользователя</label>
-                  <input type="text" placeholder="gamepro2077" className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
+                  <input type="text" placeholder="gamepro2077" value={authForm.username}
+                    onChange={e => setAuthForm(f => ({ ...f, username: e.target.value }))}
+                    className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
                     style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,245,255,0.2)" }} />
                 </div>
               )}
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">Email</label>
-                <input type="email" placeholder="your@email.com" className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
+                <input type="email" placeholder="your@email.com" value={authForm.email}
+                  onChange={e => setAuthForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
                   style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,245,255,0.2)" }} />
               </div>
               <div>
                 <label className="text-xs text-gray-400 mb-1 block">Пароль</label>
-                <input type="password" placeholder="••••••••" className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
+                <input type="password" placeholder="••••••••" value={authForm.password}
+                  onChange={e => setAuthForm(f => ({ ...f, password: e.target.value }))}
+                  onKeyDown={e => e.key === "Enter" && handleAuthSubmit()}
+                  className="w-full px-4 py-3 rounded-lg text-sm text-white placeholder-gray-600 outline-none transition-colors"
                   style={{ background: "rgba(0,0,0,0.4)", border: "1px solid rgba(0,245,255,0.2)" }} />
               </div>
-              {authTab === "login" && (
-                <div className="text-right">
-                  <button className="text-xs text-gray-500 hover:text-cyan-400 transition-colors">Забыли пароль?</button>
+
+              {authError && (
+                <div className="px-4 py-3 rounded-lg text-sm text-red-400" style={{ background: "rgba(255,68,68,0.1)", border: "1px solid rgba(255,68,68,0.3)" }}>
+                  {authError}
                 </div>
               )}
-              <button className="w-full py-3 rounded-lg font-bold text-sm tracking-wider neon-btn-solid mt-2" style={{ fontFamily: "'Orbitron', monospace" }}>
-                {authTab === "login" ? "Войти в аккаунт" : "Создать аккаунт"}
+
+              <button onClick={handleAuthSubmit} disabled={authLoading}
+                className="w-full py-3 rounded-lg font-bold text-sm tracking-wider neon-btn-solid mt-2 flex items-center justify-center gap-2 disabled:opacity-60"
+                style={{ fontFamily: "'Orbitron', monospace" }}>
+                {authLoading ? <><Icon name="Loader" size={16} className="animate-spin" />{authTab === "login" ? "Входим..." : "Создаём..."}</> : (authTab === "login" ? "Войти в аккаунт" : "Создать аккаунт")}
               </button>
               <p className="text-center text-xs text-gray-600">
                 {authTab === "login" ? "Нет аккаунта? " : "Уже есть аккаунт? "}
-                <button onClick={() => setAuthTab(authTab === "login" ? "register" : "login")} className="text-cyan-400 hover:underline">
+                <button onClick={() => { setAuthTab(authTab === "login" ? "register" : "login"); setAuthError(""); }} className="text-cyan-400 hover:underline">
                   {authTab === "login" ? "Регистрация" : "Войти"}
                 </button>
               </p>
@@ -811,180 +894,7 @@ export default function Index() {
         </div>
       )}
 
-      {/* Pterodactyl Install Modal */}
-      {modal === "pterodactyl" && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.9)", backdropFilter: "blur(8px)" }} onClick={() => setModal(null)}>
-          <div className="w-full max-w-3xl rounded-2xl overflow-hidden animate-fade-in-up max-h-[90vh] flex flex-col" style={{ background: "rgba(5,10,20,0.99)", border: "1px solid rgba(191,90,242,0.4)", boxShadow: "0 0 80px rgba(191,90,242,0.2)" }} onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4" style={{ background: "rgba(0,0,0,0.5)", borderBottom: "1px solid rgba(191,90,242,0.2)" }}>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(191,90,242,0.2)" }}>
-                  <Icon name="Feather" size={18} style={{ color: "var(--neon-purple)" }} />
-                </div>
-                <div>
-                  <div className="font-bold text-white text-sm" style={{ fontFamily: "'Orbitron', monospace" }}>Pterodactyl Panel</div>
-                  <div className="text-xs text-gray-500">Гайд по установке на Ubuntu 22.04</div>
-                </div>
-              </div>
-              <button onClick={() => setModal(null)} className="text-gray-500 hover:text-white transition-colors">
-                <Icon name="X" size={20} />
-              </button>
-            </div>
-
-            {/* Steps nav */}
-            <div className="flex overflow-x-auto px-6 py-3 gap-2" style={{ borderBottom: "1px solid rgba(191,90,242,0.15)", scrollbarWidth: "none" }}>
-              {["Зависимости", "База данных", "Установка", "Настройка", "Systemd"].map((step, i) => (
-                <button key={i} onClick={() => setPteroStep(i)}
-                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                  style={{ background: pteroStep === i ? "rgba(191,90,242,0.2)" : "rgba(255,255,255,0.05)", color: pteroStep === i ? "var(--neon-purple)" : "#6b7280", border: pteroStep === i ? "1px solid rgba(191,90,242,0.4)" : "1px solid transparent" }}>
-                  {i + 1}. {step}
-                </button>
-              ))}
-            </div>
-
-            <div className="overflow-y-auto p-6 flex-1">
-              {pteroStep === 0 && (
-                <div className="space-y-3">
-                  <p className="text-gray-400 text-sm mb-4">Установка PHP 8.3, MariaDB, Redis, Nginx и Composer на Ubuntu 22.04.</p>
-                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Обновление пакетов
-apt -y install software-properties-common curl \\
-  apt-transport-https ca-certificates gnupg
-
-# PHP 8.3 (PPA Ondřej)
-LC_ALL=C.UTF-8 add-apt-repository -y ppa:ondrej/php
-
-# Redis официальный репозиторий
-curl -fsSL https://packages.redis.io/gpg | \\
-  sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] \\
-  https://packages.redis.io/deb $(lsb_release -cs) main" | \\
-  sudo tee /etc/apt/sources.list.d/redis.list
-
-apt update
-
-# Установка всех зависимостей
-apt -y install php8.3 php8.3-{common,cli,gd,mysql,mbstring,bcmath,xml,fpm,curl,zip} \\
-  mariadb-server nginx tar unzip git redis-server
-
-# Composer
-curl -sS https://getcomposer.org/installer | \\
-  sudo php -- --install-dir=/usr/local/bin --filename=composer`}</pre>
-                </div>
-              )}
-              {pteroStep === 1 && (
-                <div className="space-y-3">
-                  <p className="text-gray-400 text-sm mb-4">Создание базы данных и пользователя MariaDB для панели.</p>
-                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Подключиться к MariaDB
-mariadb -u root -p
-
-# Внутри MariaDB — замени 'yourPassword' на свой пароль!
-CREATE USER 'pterodactyl'@'127.0.0.1' 
-  IDENTIFIED BY 'yourPassword';
-CREATE DATABASE panel;
-GRANT ALL PRIVILEGES ON panel.* 
-  TO 'pterodactyl'@'127.0.0.1' WITH GRANT OPTION;
-exit`}</pre>
-                  <div className="p-3 rounded-lg text-xs" style={{ background: "rgba(255,170,0,0.08)", border: "1px solid rgba(255,170,0,0.2)", color: "#ffaa00" }}>
-                    Запомни пароль — он понадобится на шаге настройки окружения.
-                  </div>
-                </div>
-              )}
-              {pteroStep === 2 && (
-                <div className="space-y-3">
-                  <p className="text-gray-400 text-sm mb-4">Скачивание и распаковка панели Pterodactyl.</p>
-                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`mkdir -p /var/www/pterodactyl
-cd /var/www/pterodactyl
-
-curl -Lo panel.tar.gz \\
-  https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz
-tar -xzvf panel.tar.gz
-chmod -R 755 storage/* bootstrap/cache/
-
-cp .env.example .env
-COMPOSER_ALLOW_SUPERUSER=1 composer install \\
-  --no-dev --optimize-autoloader
-
-# Генерация ключа приложения
-php artisan key:generate --force`}</pre>
-                </div>
-              )}
-              {pteroStep === 3 && (
-                <div className="space-y-3">
-                  <p className="text-gray-400 text-sm mb-4">Настройка окружения, подключение к БД и создание первого администратора.</p>
-                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Настройка окружения (URL сайта, кеш и т.д.)
-php artisan p:environment:setup
-
-# Подключение к базе данных
-php artisan p:environment:database
-
-# (Опционально) Настройка почты
-php artisan p:environment:mail
-
-# Миграция и заполнение БД
-php artisan migrate --seed --force
-
-# Создать первого администратора
-php artisan p:user:make
-
-# Права на файлы для Nginx
-chown -R www-data:www-data /var/www/pterodactyl/*
-
-# Крон — добавь в crontab (crontab -e)
-* * * * * php /var/www/pterodactyl/artisan schedule:run >> /dev/null 2>&1`}</pre>
-                </div>
-              )}
-              {pteroStep === 4 && (
-                <div className="space-y-3">
-                  <p className="text-gray-400 text-sm mb-4">Настройка systemd-сервиса для очереди задач Pterodactyl.</p>
-                  <pre className="text-xs p-4 rounded-xl overflow-x-auto leading-relaxed" style={{ background: "rgba(0,0,0,0.6)", color: "var(--neon-cyan)", border: "1px solid rgba(0,245,255,0.15)", fontFamily: "monospace" }}>{`# Создай файл /etc/systemd/system/pteroq.service
-[Unit]
-Description=Pterodactyl Queue Worker
-After=redis-server.service
-
-[Service]
-User=www-data
-Group=www-data
-Restart=always
-ExecStart=/usr/bin/php /var/www/pterodactyl/artisan \\
-  queue:work --queue=high,standard,low --sleep=3 --tries=3
-StartLimitInterval=180
-StartLimitBurst=30
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-
-# Запуск сервисов
-sudo systemctl enable --now redis-server
-sudo systemctl enable --now pteroq.service`}</pre>
-                  <div className="p-3 rounded-lg text-xs" style={{ background: "rgba(57,255,20,0.06)", border: "1px solid rgba(57,255,20,0.2)", color: "var(--neon-green)" }}>
-                    Готово! Теперь перейди на pterodactyl.io для настройки Nginx и Wings (агента на нодах).
-                  </div>
-                  <a href="https://pterodactyl.io/panel/1.0/getting_started.html" target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold"
-                    style={{ background: "rgba(191,90,242,0.15)", color: "var(--neon-purple)", border: "1px solid rgba(191,90,242,0.3)" }}>
-                    <Icon name="ExternalLink" size={12} />
-                    Официальная документация Pterodactyl
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: "1px solid rgba(191,90,242,0.15)" }}>
-              <button onClick={() => setPteroStep(Math.max(0, pteroStep - 1))} disabled={pteroStep === 0}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-30"
-                style={{ background: "rgba(255,255,255,0.05)", color: "#9ca3af" }}>
-                ← Назад
-              </button>
-              <span className="text-xs text-gray-600">Шаг {pteroStep + 1} из 5</span>
-              <button onClick={() => setPteroStep(Math.min(4, pteroStep + 1))} disabled={pteroStep === 4}
-                className="px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-30"
-                style={{ background: "rgba(191,90,242,0.15)", color: "var(--neon-purple)", border: "1px solid rgba(191,90,242,0.3)" }}>
-                Далее →
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Pterodactyl is at /pterodactyl route */}
 
       <footer className="py-12 px-4" style={{ background: "rgba(5,10,15,0.9)", borderTop: "1px solid rgba(0,245,255,0.1)" }}>
         <div className="max-w-7xl mx-auto">
